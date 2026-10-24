@@ -1,8 +1,8 @@
 import { createApp } from './app.js';
-import { closeDb, getDb } from './config/database.js';
+import { closeDb, initDb } from './config/database.js';
 import env from './config/env.js';
 
-getDb();
+await initDb();
 const app = createApp();
 
 // Host opsional (mis. APP_HOST=127.0.0.1 dari panel hosting); default semua interface.

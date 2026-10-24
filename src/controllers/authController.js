@@ -11,6 +11,7 @@ function cookieOptions() {
     httpOnly: true,
     secure: env.cookieSecure,
     sameSite: env.cookieSameSite,
+    partitioned: env.cookiePartitioned,
     path: '/',
   };
 }
@@ -19,14 +20,14 @@ function setSessionCookie(res, token) {
   res.cookie(COOKIE_NAME, token, { ...cookieOptions(), maxAge: ONE_DAY_MS });
 }
 
-export function login(req, res) {
-  const { user, token } = authService.login(validateLogin(req.body));
+export async function login(req, res) {
+  const { user, token } = await authService.login(validateLogin(req.body));
   setSessionCookie(res, token);
   return success(res, 'Login berhasil', { user });
 }
 
-export function register(req, res) {
-  const { user, token } = authService.register(validateRegister(req.body));
+export async function register(req, res) {
+  const { user, token } = await authService.register(validateRegister(req.body));
   setSessionCookie(res, token);
   return success(res, 'Registrasi berhasil', { user }, 201);
 }

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDb } from '../src/config/database.js';
+import { Database, getDb } from '../src/config/database.js';
 import { ADMIN, BUDI, SARI, loginAs, makeApp, seedDemo, validReport } from './helpers.js';
 
 let app;
@@ -10,7 +10,7 @@ let admin;
 
 // Data demo: #1 Budi diproses, #2 Sari selesai, #3 Budi menunggu, #4 Sari menunggu (darurat)
 beforeEach(async () => {
-  seedDemo();
+  await seedDemo();
   app = makeApp();
   [budi, sari, admin] = await Promise.all([loginAs(app, BUDI), loginAs(app, SARI), loginAs(app, ADMIN)]);
 });
@@ -65,7 +65,7 @@ describe('POST /api/reports', () => {
     const res = await budi.post('/api/reports').send({ ...validReport, title });
     expect(res.status).toBe(201);
     expect(res.body.data.report.title).toBe(title);
-    const count = getDb().prepare('SELECT COUNT(*) AS n FROM reports').get().n;
+    const count = (await getDb().prepare('SELECT COUNT(*) AS n FROM reports').get()).n;
     expect(count).toBe(5);
   });
 });
@@ -119,7 +119,7 @@ describe('GET /api/reports', () => {
   });
 
   it('filter tanggal', async () => {
-    getDb().prepare("UPDATE reports SET created_at = '2026-01-15T08:00:00.000Z' WHERE id = 1").run();
+    await getDb().prepare("UPDATE reports SET created_at = '2026-01-15T08:00:00.000Z' WHERE id = 1").run();
     const res = await admin.get('/api/reports?dateFrom=2026-01-01&dateTo=2026-01-31');
     expect(res.body.data.reports.map((r) => r.id)).toEqual([1]);
     const none = await admin.get('/api/reports?dateFrom=2099-01-01');
@@ -128,7 +128,7 @@ describe('GET /api/reports', () => {
   });
 
   it('pengurutan prioritas, terbaru, dan terlama', async () => {
-    getDb().prepare("UPDATE reports SET created_at = '2026-01-0' || id || 'T00:00:00.000Z'").run();
+    await getDb().prepare("UPDATE reports SET created_at = '2026-01-0' || id || 'T00:00:00.000Z'").run();
     const prio = await admin.get('/api/reports?sort=priority');
     expect(prio.body.data.reports.map((r) => r.priority)).toEqual(['darurat', 'tinggi', 'sedang', 'rendah']);
     const newest = await admin.get('/api/reports?sort=newest');
@@ -202,7 +202,7 @@ describe('DELETE /api/reports/:id', () => {
     const res = await budi.delete('/api/reports/3');
     expect(res.status).toBe(200);
     expect((await budi.get('/api/reports/3')).status).toBe(404);
-    const history = getDb().prepare('SELECT COUNT(*) AS n FROM report_history WHERE report_id = 3').get();
+    const history = await getDb().prepare('SELECT COUNT(*) AS n FROM report_history WHERE report_id = 3').get();
     expect(history.n).toBe(0);
   });
 
@@ -312,11 +312,11 @@ describe('GET /api/reports/stats', () => {
 
 describe('kesalahan database', () => {
   it('kegagalan query saat membuat laporan mengembalikan 500 yang aman', async () => {
-    const db = getDb();
-    const original = db.prepare.bind(db);
-    const spy = vi.spyOn(db, 'prepare').mockImplementation((sql) => {
+    // Query INSERT berjalan di dalam transaksi (objek Database lain), jadi prototipe yang di-spy.
+    const original = Database.prototype.prepare;
+    const spy = vi.spyOn(Database.prototype, 'prepare').mockImplementation(function prepare(sql) {
       if (sql.startsWith('INSERT INTO reports')) throw new Error('SQLITE_FULL: database or disk is full');
-      return original(sql);
+      return original.call(this, sql);
     });
     const res = await budi.post('/api/reports').send(validReport);
     spy.mockRestore();
@@ -325,13 +325,13 @@ describe('kesalahan database', () => {
     expect(res.body.stack).toBeUndefined();
   });
 
-  it('constraint CHECK di database menolak nilai di luar daftar', () => {
-    expect(() =>
+  it('constraint CHECK di database menolak nilai di luar daftar', async () => {
+    await expect(
       getDb()
         .prepare(
           "INSERT INTO reports (title, category, location, description, priority, status, reporter_id) VALUES ('a','x','b','c','rendah','menunggu',1)",
         )
         .run(),
-    ).toThrow(/CHECK constraint failed/);
+    ).rejects.toThrow(/CHECK constraint failed/);
   });
 });

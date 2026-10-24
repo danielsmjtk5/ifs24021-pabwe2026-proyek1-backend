@@ -1,6 +1,6 @@
-import { getDb, closeDb } from '../src/config/database.js';
+import { closeDb, initDb } from '../src/config/database.js';
 import env from '../src/config/env.js';
 
-getDb();
-console.log(`Migrasi selesai pada database: ${env.dbPath}`);
+await initDb();
+console.log(`Migrasi selesai pada database: ${env.databaseUrl}`);
 closeDb();

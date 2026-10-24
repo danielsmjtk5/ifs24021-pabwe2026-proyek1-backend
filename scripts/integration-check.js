@@ -1,7 +1,7 @@
 // Uji integrasi terhadap back-end yang sudah di-deploy:
 // login -> buat laporan -> ambil kembali laporan yang sama lewat API.
 // Pemakaian:
-//   API_URL=https://api-anda.s1if.cloud/api FRONTEND_URL=https://web-anda.s1if.cloud \
+//   API_URL=https://api-anda.vercel.app/api FRONTEND_URL=https://web-anda.s1if.cloud \
 //   CHECK_EMAIL=budi@asramacare.test CHECK_PASSWORD=... node scripts/integration-check.js
 const apiUrl = (process.env.API_URL || 'http://localhost:3000/api').replace(/\/$/, '');
 const origin = process.env.FRONTEND_URL || 'http://localhost:5173';

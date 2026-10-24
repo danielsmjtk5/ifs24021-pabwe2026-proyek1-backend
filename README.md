@@ -1,7 +1,12 @@
 # AsramaCare — Back-end
 
-REST API AsramaCare (Express.js + SQLite) untuk front-end AsramaCare yang berada di repository terpisah
-(`ifs24021-pabwe2026-proyek1`). API memvalidasi data, memprosesnya, dan menyimpannya ke SQLite.
+REST API AsramaCare (Express.js + SQLite/libSQL) untuk front-end AsramaCare yang berada di repository
+terpisah (`ifs24021-pabwe2026-proyek1`). API memvalidasi data, memprosesnya, dan menyimpannya ke SQLite.
+
+- Lokal: file SQLite (`data/asramacare.db`).
+- Produksi: di-deploy ke **Vercel** sebagai serverless function (`api/index.js`), dengan database
+  **Turso** (libSQL, turunan SQLite yang di-hosting). Vercel tidak menyimpan file secara permanen,
+  jadi file SQLite biasa akan hilang; Turso memakai dialek dan skema SQLite yang sama.
 
 ## Menjalankan di lokal
 
@@ -21,9 +26,10 @@ bun run dev            # http://localhost:3000/api
 | `JWT_SECRET` | Wajib di produksi, minimal 32 karakter acak. |
 | `FRONTEND_URL` | URL front-end yang di-deploy. Dipakai sebagai default `CORS_ORIGIN` dan cookie `Secure`. |
 | `CORS_ORIGIN` | Origin front-end yang diizinkan (pisahkan dengan koma). |
-| `COOKIE_SAMESITE` / `COOKIE_SECURE` | `lax` cukup bila front-end dan back-end satu domain induk (mis. `*.s1if.cloud`). Domain berbeda: `none` + `true`. |
+| `COOKIE_SAMESITE` / `COOKIE_SECURE` / `COOKIE_PARTITIONED` | Lokal: `lax`/`false`/`false`. Vercel (beda situs dengan front-end): `none`/`true`/`true`. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Akun admin awal yang dibuat seed. |
-| `DB_PATH` | Lokasi file SQLite. |
+| `DATABASE_URL` | `file:./data/asramacare.db` (lokal) atau `libsql://<db>.turso.io` (Vercel). |
+| `DATABASE_AUTH_TOKEN` | Token Turso. Kosongkan untuk file lokal. |
 
 Lihat `.env.example` untuk daftar lengkap.
 
@@ -40,17 +46,32 @@ Lihat `.env.example` untuk daftar lengkap.
 Contoh uji integrasi ke server deploy:
 
 ```bash
-API_URL=https://ifs24021-pabwe2026-proyek1-backend.s1if.cloud/api \
+API_URL=https://ifs24021-pabwe2026-proyek1-backend.vercel.app/api \
 FRONTEND_URL=https://ifs24021-pabwe2026-proyek1.s1if.cloud \
 CHECK_EMAIL=budi@asramacare.test CHECK_PASSWORD=<password> bun run check:integration
 ```
+
+## Deploy ke Vercel + Turso
+
+1. Buat database Turso (lihat panduan di repo front-end atau https://docs.turso.tech), catat URL
+   `libsql://...` dan token.
+2. Di Vercel: **Add New → Project → Import** repo ini. Framework Preset: **Other**. Build Command dan
+   Output Directory dibiarkan kosong.
+3. Isi Environment Variables: `NODE_ENV=production`, `JWT_SECRET`, `DATABASE_URL`,
+   `DATABASE_AUTH_TOKEN`, `FRONTEND_URL`, `CORS_ORIGIN`, `COOKIE_SAMESITE=none`, `COOKIE_SECURE=true`,
+   `COOKIE_PARTITIONED=true`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `SEED_DEMO=true`.
+4. Deploy. `vercel.json` mengarahkan semua request ke `api/index.js`, yang menjalankan migrasi dan seed
+   (idempoten) saat cold start lalu meneruskan request ke aplikasi Express.
+5. Cek `https://<project>.vercel.app/api/health`.
 
 ## Arsitektur
 
 `routes` → `middlewares` (authenticate/authorize) → `controllers` → `validators` → `services` → SQLite.
 
-- `src/config/database.js` membuka koneksi SQLite lewat modul bawaan `node:sqlite` (`DatabaseSync`, tanpa kompilasi native), mengaktifkan `foreign_keys` dan WAL,
-  lalu menjalankan migrasi yang belum tercatat di `schema_migrations`.
+- `src/config/database.js` membuka koneksi lewat `@libsql/client`: file SQLite lokal (`file:`) atau
+  Turso (`libsql://`, lewat HTTP sehingga cocok untuk serverless). Lapisan tipis `prepare().get/all/run`
+  menjaga query tetap berupa prepared statement, `transaction()` membungkus operasi multi-query, lalu
+  migrasi yang belum tercatat di `schema_migrations` dijalankan dan `foreign_keys` diaktifkan.
 - Semua query memakai prepared statement dengan parameter (tidak ada penggabungan string input).
 - `src/middlewares/errorHandler.js` mengubah `AppError` menjadi respons JSON, dan menyembunyikan
   detail kesalahan lain (termasuk error database) di balik pesan 500 yang umum.
@@ -66,11 +87,13 @@ dan penyajian build front-end.
 
 ## Database SQLite
 
-- File database: `data/asramacare.db` (diatur lewat `DB_PATH`).
+- File database lokal: `data/asramacare.db` (diatur lewat `DATABASE_URL`). Di Vercel: database Turso.
 - Migrasi (`database/migrations/*.sql`) dijalankan otomatis saat server/seed membuka database dan
   dicatat di tabel `schema_migrations`, sehingga aman dijalankan berulang.
 - `npm run migrate` hanya menjalankan migrasi; `npm run seed` menjalankan migrasi + seed (idempoten).
 - Reset database lokal: hentikan server, hapus `data/asramacare.db*`, lalu `npm run seed`.
+- `DATABASE_URL=libsql://... DATABASE_AUTH_TOKEN=... bun run seed` menjalankan migrasi + seed langsung
+  ke database Turso dari laptop.
 
 Skema: `users`, `reports`, `report_history` dengan foreign key (`ON DELETE CASCADE`),
 constraint `CHECK` untuk role/kategori/prioritas/status, dan indeks pada `reporter_id`, `status`,
@@ -79,7 +102,8 @@ constraint `CHECK` untuk role/kategori/prioritas/status, dan indeks pada `report
 ## Strategi autentikasi
 
 - Password di-hash dengan **bcrypt** (10 salt rounds); hash tidak pernah dikirim ke klien.
-- Setelah login, server mengirim **JWT di cookie `httpOnly`** (`SameSite=Lax`, `Secure` di produksi).
+- Setelah login, server mengirim **JWT di cookie `httpOnly`** (`SameSite=Lax` di lokal; di Vercel `SameSite=None; Secure; Partitioned` karena front-end dan
+  back-end berbeda situs).
   JavaScript di browser tidak dapat membaca token, sehingga token tidak tersimpan di `localStorage`
   dan lebih tahan terhadap pencurian lewat XSS.
 - Front-end memanggil `GET /api/auth/me` saat aplikasi dibuka untuk memulihkan sesi.

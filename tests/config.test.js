@@ -40,12 +40,36 @@ describe('konfigurasi environment', () => {
     });
   });
 
+  it('konfigurasi Vercel: Turso, CORS dari FRONTEND_URL, dan cookie lintas situs', async () => {
+    const env = await loadEnv({
+      NODE_ENV: 'production',
+      JWT_SECRET: 's'.repeat(40),
+      DATABASE_URL: 'libsql://asramacare-albert.turso.io',
+      DATABASE_AUTH_TOKEN: 'token-uji',
+      FRONTEND_URL: 'https://ifs24021-pabwe2026-proyek1.s1if.cloud',
+      CORS_ORIGIN: '',
+      COOKIE_SAMESITE: 'none',
+      COOKIE_SECURE: 'true',
+      COOKIE_PARTITIONED: 'true',
+    });
+    expect(env).toMatchObject({
+      databaseUrl: 'libsql://asramacare-albert.turso.io',
+      databaseAuthToken: 'token-uji',
+      corsOrigins: ['https://ifs24021-pabwe2026-proyek1.s1if.cloud'],
+      cookieSameSite: 'none',
+      cookieSecure: true,
+      cookiePartitioned: true,
+    });
+  });
+
   it('memakai nilai default untuk development', async () => {
     const env = await loadEnv({
       NODE_ENV: '',
       JWT_SECRET: '',
       PORT: '',
       DB_PATH: '',
+      DATABASE_URL: '',
+      FRONTEND_URL: '',
       CORS_ORIGIN: '',
       COOKIE_SAMESITE: '',
       JWT_EXPIRES_IN: '',
@@ -54,7 +78,7 @@ describe('konfigurasi environment', () => {
     expect(env).toMatchObject({
       nodeEnv: 'development',
       port: 3000,
-      dbPath: './data/asramacare.db',
+      databaseUrl: 'file:./data/asramacare.db',
       corsOrigins: ['http://localhost:5173'],
       cookieSameSite: 'lax',
       jwtExpiresIn: '1d',

@@ -55,8 +55,8 @@ export function permissionsFor(report, viewer) {
   };
 }
 
-function findRow(id) {
-  const row = getDb().prepare(`${SELECT_REPORT} WHERE r.id = ?`).get(id);
+async function findRow(id) {
+  const row = await getDb().prepare(`${SELECT_REPORT} WHERE r.id = ?`).get(id);
   if (!row) throw AppError.notFound('Laporan tidak ditemukan');
   return row;
 }
@@ -89,12 +89,12 @@ function buildWhere(filters, viewer) {
   return { where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params };
 }
 
-export function listReports(filters, viewer) {
+export async function listReports(filters, viewer) {
   const db = getDb();
   const { where, params } = buildWhere(filters, viewer);
-  const { total } = db.prepare(`SELECT COUNT(*) AS total FROM reports r ${where}`).get(params);
+  const { total } = await db.prepare(`SELECT COUNT(*) AS total FROM reports r ${where}`).get(params);
   const offset = (filters.page - 1) * filters.limit;
-  const rows = db
+  const rows = await db
     .prepare(`${SELECT_REPORT} ${where} ORDER BY ${SORT_SQL[filters.sort]} LIMIT @limit OFFSET @offset`)
     .all({ ...params, limit: filters.limit, offset });
 
@@ -120,39 +120,40 @@ export function getHistory(reportId) {
     .all(reportId);
 }
 
-export function getReport(id, viewer) {
-  const report = present(findRow(id), viewer);
-  report.history = getHistory(id);
+export async function getReport(id, viewer) {
+  const report = present(await findRow(id), viewer);
+  report.history = await getHistory(id);
   return report;
 }
 
-export function createReport(data, viewer) {
-  const db = getDb();
-  const id = transaction(db, () => {
-    const info = db
+export async function createReport(data, viewer) {
+  const id = await transaction(getDb(), async (tx) => {
+    const info = await tx
       .prepare(
         `INSERT INTO reports (title, category, location, description, priority, status, reporter_id)
          VALUES (@title, @category, @location, @description, @priority, 'menunggu', @reporterId)`,
       )
       .run({ ...data, reporterId: viewer.id });
-    db.prepare(
-      `INSERT INTO report_history (report_id, changed_by, old_status, new_status, note)
-       VALUES (?, ?, NULL, 'menunggu', 'Laporan dibuat')`,
-    ).run(info.lastInsertRowid, viewer.id);
+    await tx
+      .prepare(
+        `INSERT INTO report_history (report_id, changed_by, old_status, new_status, note)
+         VALUES (?, ?, NULL, 'menunggu', 'Laporan dibuat')`,
+      )
+      .run(info.lastInsertRowid, viewer.id);
     return info.lastInsertRowid;
   });
   return getReport(id, viewer);
 }
 
-export function updateReport(id, data, viewer) {
-  const row = findRow(id);
+export async function updateReport(id, data, viewer) {
+  const row = await findRow(id);
   if (row.reporter_id !== viewer.id) {
     throw AppError.forbidden('Anda hanya dapat mengubah laporan milik sendiri');
   }
   if (row.status !== EDITABLE_STATUS) {
     throw AppError.conflict('Laporan yang sudah diproses tidak dapat diubah');
   }
-  getDb()
+  await getDb()
     .prepare(
       `UPDATE reports SET title = @title, category = @category, location = @location,
         description = @description, priority = @priority, updated_at = ${NOW} WHERE id = @id`,
@@ -161,8 +162,8 @@ export function updateReport(id, data, viewer) {
   return getReport(id, viewer);
 }
 
-export function deleteReport(id, viewer) {
-  const row = findRow(id);
+export async function deleteReport(id, viewer) {
+  const row = await findRow(id);
   if (viewer.role !== 'admin') {
     if (row.reporter_id !== viewer.id) {
       throw AppError.forbidden('Anda hanya dapat menghapus laporan milik sendiri');
@@ -171,63 +172,69 @@ export function deleteReport(id, viewer) {
       throw AppError.conflict('Laporan yang sudah diproses tidak dapat dihapus');
     }
   }
-  getDb().prepare('DELETE FROM reports WHERE id = ?').run(id);
+  // Riwayat dihapus eksplisit agar tidak bergantung pada PRAGMA foreign_keys di database online.
+  await transaction(getDb(), async (tx) => {
+    await tx.prepare('DELETE FROM report_history WHERE report_id = ?').run(id);
+    await tx.prepare('DELETE FROM reports WHERE id = ?').run(id);
+  });
 }
 
-export function changeStatus(id, { status, note }, viewer) {
-  const row = findRow(id);
+export async function changeStatus(id, { status, note }, viewer) {
+  const row = await findRow(id);
   if (!STATUS_TRANSITIONS[row.status].includes(status)) {
     throw AppError.conflict(`Status tidak dapat diubah dari "${row.status}" menjadi "${status}"`);
   }
-  const db = getDb();
-  transaction(db, () => {
-    db.prepare(`UPDATE reports SET status = ?, updated_at = ${NOW} WHERE id = ?`).run(status, id);
-    db.prepare(
-      `INSERT INTO report_history (report_id, changed_by, old_status, new_status, note)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).run(id, viewer.id, row.status, status, note);
+  await transaction(getDb(), async (tx) => {
+    await tx.prepare(`UPDATE reports SET status = ?, updated_at = ${NOW} WHERE id = ?`).run(status, id);
+    await tx
+      .prepare(
+        `INSERT INTO report_history (report_id, changed_by, old_status, new_status, note)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(id, viewer.id, row.status, status, note);
   });
   return getReport(id, viewer);
 }
 
 /** Catatan tindak lanjut tanpa mengubah status (old_status = new_status). */
-export function addNote(id, { note }, viewer) {
-  const row = findRow(id);
-  const db = getDb();
-  transaction(db, () => {
-    db.prepare(
-      `INSERT INTO report_history (report_id, changed_by, old_status, new_status, note)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).run(id, viewer.id, row.status, row.status, note);
-    db.prepare(`UPDATE reports SET updated_at = ${NOW} WHERE id = ?`).run(id);
+export async function addNote(id, { note }, viewer) {
+  const row = await findRow(id);
+  await transaction(getDb(), async (tx) => {
+    await tx
+      .prepare(
+        `INSERT INTO report_history (report_id, changed_by, old_status, new_status, note)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(id, viewer.id, row.status, row.status, note);
+    await tx.prepare(`UPDATE reports SET updated_at = ${NOW} WHERE id = ?`).run(id);
   });
   return getReport(id, viewer);
 }
 
 /** Admin melihat statistik seluruh laporan, penghuni melihat laporannya sendiri. */
-export function getStats(viewer) {
+export async function getStats(viewer) {
   const db = getDb();
   const scoped = viewer.role !== 'admin';
   const where = scoped ? 'WHERE r.reporter_id = @viewerId' : '';
   const params = scoped ? { viewerId: viewer.id } : {};
 
   const byStatus = { menunggu: 0, diproses: 0, selesai: 0, ditolak: 0 };
-  for (const row of db
+  const statusRows = await db
     .prepare(`SELECT r.status, COUNT(*) AS count FROM reports r ${where} GROUP BY r.status`)
-    .all(params)) {
+    .all(params);
+  for (const row of statusRows) {
     byStatus[row.status] = row.count;
   }
 
-  const byCategory = db
+  const byCategory = await db
     .prepare(
       `SELECT r.category, COUNT(*) AS count FROM reports r ${where} GROUP BY r.category ORDER BY count DESC`,
     )
     .all(params);
 
-  const recent = db
-    .prepare(`${SELECT_REPORT} ${where} ORDER BY r.created_at DESC, r.id DESC LIMIT 5`)
-    .all(params)
-    .map((row) => present(row, viewer));
+  const recent = (
+    await db.prepare(`${SELECT_REPORT} ${where} ORDER BY r.created_at DESC, r.id DESC LIMIT 5`).all(params)
+  ).map((row) => present(row, viewer));
 
   const total = Object.values(byStatus).reduce((sum, n) => sum + n, 0);
   return { scope: scoped ? 'mine' : 'all', total, byStatus, byCategory, recent };

@@ -1,14 +1,14 @@
 {
   "name": "asramacare-backend",
   "version": "1.0.0",
-  "description": "REST API AsramaCare (Express.js + SQLite)",
+  "description": "REST API AsramaCare (Express.js + SQLite/libSQL)",
   "main": "src/server.js",
   "scripts": {
     "start": "node scripts/start.js",
-    "serve": "node --disable-warning=ExperimentalWarning src/server.js",
-    "dev": "node --disable-warning=ExperimentalWarning --watch src/server.js",
-    "migrate": "node --disable-warning=ExperimentalWarning database/migrate.js",
-    "seed": "node --disable-warning=ExperimentalWarning database/seeds/seed.js",
+    "serve": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "node database/migrate.js",
+    "seed": "node database/seeds/seed.js",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "check:integration": "node scripts/integration-check.js"
@@ -16,6 +16,7 @@
   "author": "Albert",
   "license": "MIT",
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.2",
     "cookie-parser": "^1.4.7",

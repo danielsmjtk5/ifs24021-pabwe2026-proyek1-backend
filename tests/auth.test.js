@@ -6,8 +6,8 @@ import { getDb } from '../src/config/database.js';
 import { ADMIN, BUDI, loginAs, makeApp, seedDemo } from './helpers.js';
 
 let app;
-beforeEach(() => {
-  seedDemo();
+beforeEach(async () => {
+  await seedDemo();
   app = makeApp();
 });
 
@@ -52,8 +52,8 @@ describe('POST /api/auth/login', () => {
     expect(empty.body.errors.email).toBe('Email wajib diisi');
   });
 
-  it('password disimpan sebagai hash bcrypt', () => {
-    const row = getDb().prepare('SELECT password_hash FROM users WHERE email = ?').get(BUDI.email);
+  it('password disimpan sebagai hash bcrypt', async () => {
+    const row = await getDb().prepare('SELECT password_hash FROM users WHERE email = ?').get(BUDI.email);
     expect(row.password_hash).not.toBe(BUDI.password);
     expect(row.password_hash).toMatch(/^\$2[aby]\$10\$/);
   });
@@ -158,7 +158,7 @@ describe('sesi', () => {
   });
 
   it('mendukung header Authorization Bearer', async () => {
-    const user = getDb().prepare('SELECT id, role FROM users WHERE email = ?').get(BUDI.email);
+    const user = await getDb().prepare('SELECT id, role FROM users WHERE email = ?').get(BUDI.email);
     const token = jwt.sign({ sub: String(user.id), role: user.role }, env.jwtSecret);
     const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);

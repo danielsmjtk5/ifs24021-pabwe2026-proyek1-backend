@@ -6,16 +6,16 @@ export function getMe(req, res) {
   return success(res, 'Profil pengguna', { user: req.user });
 }
 
-export function updateMe(req, res) {
-  const user = userService.updateProfile(req.user.id, validateProfile(req.body));
+export async function updateMe(req, res) {
+  const user = await userService.updateProfile(req.user.id, validateProfile(req.body));
   return success(res, 'Profil berhasil diperbarui', { user });
 }
 
-export function changePassword(req, res) {
-  userService.changePassword(req.user.id, validatePasswordChange(req.body));
+export async function changePassword(req, res) {
+  await userService.changePassword(req.user.id, validatePasswordChange(req.body));
   return success(res, 'Password berhasil diganti');
 }
 
-export function listUsers(req, res) {
-  return success(res, 'Daftar pengguna', { users: userService.listUsers() });
+export async function listUsers(req, res) {
+  return success(res, 'Daftar pengguna', { users: await userService.listUsers() });
 }

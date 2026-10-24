@@ -9,27 +9,27 @@ export function hashPassword(password) {
   return bcrypt.hashSync(password, SALT_ROUNDS);
 }
 
-export function findById(id) {
-  return getDb().prepare(`SELECT ${PUBLIC_COLUMNS} FROM users WHERE id = ?`).get(id) || null;
+export async function findById(id) {
+  return (await getDb().prepare(`SELECT ${PUBLIC_COLUMNS} FROM users WHERE id = ?`).get(id)) || null;
 }
 
-export function findByEmailWithHash(email) {
-  return getDb().prepare('SELECT * FROM users WHERE email = ?').get(email) || null;
+export async function findByEmailWithHash(email) {
+  return (await getDb().prepare('SELECT * FROM users WHERE email = ?').get(email)) || null;
 }
 
-export function createUser({ name, email, room = null, password, role = 'penghuni' }) {
+export async function createUser({ name, email, room = null, password, role = 'penghuni' }) {
   const db = getDb();
-  if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) {
+  if (await db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) {
     throw AppError.conflict('Email sudah terdaftar');
   }
-  const info = db
+  const info = await db
     .prepare('INSERT INTO users (name, email, room, password_hash, role) VALUES (?, ?, ?, ?, ?)')
     .run(name, email, room, hashPassword(password), role);
   return findById(info.lastInsertRowid);
 }
 
-export function updateProfile(id, { name, room }) {
-  getDb()
+export async function updateProfile(id, { name, room }) {
+  await getDb()
     .prepare(
       "UPDATE users SET name = ?, room = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
     )
@@ -37,18 +37,20 @@ export function updateProfile(id, { name, room }) {
   return findById(id);
 }
 
-export function changePassword(id, { currentPassword, newPassword }) {
+export async function changePassword(id, { currentPassword, newPassword }) {
   const db = getDb();
-  const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(id);
+  const row = await db.prepare('SELECT password_hash FROM users WHERE id = ?').get(id);
   if (!row) throw AppError.notFound('Pengguna tidak ditemukan');
   if (!bcrypt.compareSync(currentPassword, row.password_hash)) {
     throw AppError.badRequest('Password lama tidak sesuai', {
       currentPassword: 'Password lama tidak sesuai',
     });
   }
-  db.prepare(
-    "UPDATE users SET password_hash = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
-  ).run(hashPassword(newPassword), id);
+  await db
+    .prepare(
+      "UPDATE users SET password_hash = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+    )
+    .run(hashPassword(newPassword), id);
 }
 
 export function listUsers() {

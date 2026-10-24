@@ -17,18 +17,18 @@ export function verifyToken(token) {
   return jwt.verify(token, env.jwtSecret);
 }
 
-export function login({ email, password }) {
-  const user = userService.findByEmailWithHash(email);
+export async function login({ email, password }) {
+  const user = await userService.findByEmailWithHash(email);
   const valid = bcrypt.compareSync(password, user ? user.password_hash : DUMMY_HASH);
   if (!user || !valid) {
     // Pesan sengaja sama untuk email salah maupun password salah.
     throw AppError.unauthorized('Email atau password salah');
   }
-  const publicUser = userService.findById(user.id);
+  const publicUser = await userService.findById(user.id);
   return { user: publicUser, token: signToken(publicUser) };
 }
 
-export function register(data) {
-  const user = userService.createUser({ ...data, role: 'penghuni' });
+export async function register(data) {
+  const user = await userService.createUser({ ...data, role: 'penghuni' });
   return { user, token: signToken(user) };
 }

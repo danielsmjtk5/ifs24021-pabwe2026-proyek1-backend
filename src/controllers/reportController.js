@@ -8,44 +8,44 @@ import {
   validateStatusChange,
 } from '../validators/reportValidator.js';
 
-export function list(req, res) {
-  const result = reportService.listReports(validateReportQuery(req.query), req.user);
+export async function list(req, res) {
+  const result = await reportService.listReports(validateReportQuery(req.query), req.user);
   return success(res, 'Daftar laporan', result);
 }
 
-export function stats(req, res) {
-  return success(res, 'Statistik laporan', reportService.getStats(req.user));
+export async function stats(req, res) {
+  return success(res, 'Statistik laporan', await reportService.getStats(req.user));
 }
 
-export function detail(req, res) {
-  const report = reportService.getReport(parseId(req.params.id), req.user);
+export async function detail(req, res) {
+  const report = await reportService.getReport(parseId(req.params.id), req.user);
   return success(res, 'Detail laporan', { report });
 }
 
-export function create(req, res) {
-  const report = reportService.createReport(validateReportInput(req.body), req.user);
+export async function create(req, res) {
+  const report = await reportService.createReport(validateReportInput(req.body), req.user);
   return success(res, 'Laporan berhasil dibuat', { report }, 201);
 }
 
-export function update(req, res) {
+export async function update(req, res) {
   const id = parseId(req.params.id);
-  const report = reportService.updateReport(id, validateReportInput(req.body), req.user);
+  const report = await reportService.updateReport(id, validateReportInput(req.body), req.user);
   return success(res, 'Laporan berhasil diperbarui', { report });
 }
 
-export function remove(req, res) {
-  reportService.deleteReport(parseId(req.params.id), req.user);
+export async function remove(req, res) {
+  await reportService.deleteReport(parseId(req.params.id), req.user);
   return success(res, 'Laporan berhasil dihapus');
 }
 
-export function changeStatus(req, res) {
+export async function changeStatus(req, res) {
   const id = parseId(req.params.id);
-  const report = reportService.changeStatus(id, validateStatusChange(req.body), req.user);
+  const report = await reportService.changeStatus(id, validateStatusChange(req.body), req.user);
   return success(res, 'Status laporan berhasil diperbarui', { report });
 }
 
-export function addNote(req, res) {
+export async function addNote(req, res) {
   const id = parseId(req.params.id);
-  const report = reportService.addNote(id, validateNote(req.body), req.user);
+  const report = await reportService.addNote(id, validateNote(req.body), req.user);
   return success(res, 'Catatan tindak lanjut ditambahkan', { report });
 }

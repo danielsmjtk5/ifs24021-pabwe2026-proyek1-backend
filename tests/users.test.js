@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ADMIN, BUDI, loginAs, makeApp, seedDemo } from './helpers.js';
 
 let app;
-beforeEach(() => {
-  seedDemo();
+beforeEach(async () => {
+  await seedDemo();
   app = makeApp();
 });
 

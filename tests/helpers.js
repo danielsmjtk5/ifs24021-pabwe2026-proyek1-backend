@@ -11,7 +11,7 @@ export function makeApp() {
   return createApp({ staticDir: '' });
 }
 
-export function seedDemo() {
+export async function seedDemo() {
   return seed(getDb(), { demo: true, admin: ADMIN });
 }
 

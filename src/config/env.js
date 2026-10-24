@@ -17,15 +17,19 @@ const env = {
   isProduction: nodeEnv === 'production',
   isTest: nodeEnv === 'test',
   port: Number(process.env.PORT) || 3000,
-  dbPath: process.env.DB_PATH || './data/asramacare.db',
+  // Lokal: file SQLite. Vercel: URL Turso (libsql://...) + token.
+  databaseUrl: process.env.DATABASE_URL || process.env.DB_PATH || 'file:./data/asramacare.db',
+  databaseAuthToken: process.env.DATABASE_AUTH_TOKEN || undefined,
   jwtSecret: readSecret(),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
-  corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  corsOrigins: (process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173')
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean),
   cookieSameSite: process.env.COOKIE_SAMESITE || 'lax',
   cookieSecure: process.env.COOKIE_SECURE === 'true',
+  // Cookie "Partitioned" (CHIPS) agar sesi tetap tersimpan saat front-end dan back-end beda domain.
+  cookiePartitioned: process.env.COOKIE_PARTITIONED === 'true',
   staticDir: process.env.STATIC_DIR || '',
   frameAncestors: (process.env.FRAME_ANCESTORS || '')
     .split(',')
