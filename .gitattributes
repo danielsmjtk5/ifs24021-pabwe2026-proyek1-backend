@@ -1,0 +1,4 @@
+* text=auto
+Jenkinsfile text eol=lf
+sonar-project.properties text eol=lf
+*.sh text eol=lf
